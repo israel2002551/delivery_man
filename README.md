@@ -1,368 +1,299 @@
-<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Delivery Robot Control</title>
+    <title>ESP32 Robot Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        :root {
+            --bg-color: #f0f0f0;
+            --widget-bg: #ffffff;
+            --shadow: 0 4px 8px rgba(0,0,0,0.1);
+            --border-rad: 8px;
+            --btn-color: #007aff;
+            --btn-stop: #ff3b30;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: var(--bg-color);
             margin: 0;
-            padding: 20px;
-            background-color: #f0f0f0;
+            padding: 10px;
+            -webkit-user-select: none; /* Disable text selection */
+            user-select: none;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            max-width: 1200px;
+            margin: auto;
         }
-        .panel {
-            margin-bottom: 20px;
+        .widget {
+            background: var(--widget-bg);
             padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: var(--border-rad);
+            box-shadow: var(--shadow);
         }
-        .panel h3 {
-            margin-top: 0;
-        }
-        .control-btn {
-            width: 60px;
-            height: 60px;
-            font-size: 20px;
-            margin: 5px;
-            cursor: pointer;
-            border: 2px solid #333;
-            border-radius: 5px;
-            background: #fff;
-        }
-        .control-btn:hover {
-            background: #e0e0e0;
-        }
-        .control-btn:active {
-            background: #ccc;
-        }
-        .forward-btn { grid-area: 1 / 2; }
-        .left-btn { grid-area: 2 / 1; }
-        .stop-btn { grid-area: 2 / 2; }
-        .right-btn { grid-area: 2 / 3; }
-        .backward-btn { grid-area: 3 / 2; }
-        .control-grid {
+        h2 { margin-top: 0; border-bottom: 2px solid var(--bg-color); padding-bottom: 5px; }
+        #map { height: 350px; width: 100%; border-radius: var(--border-rad); }
+        #status-bar { padding: 10px; text-align: center; font-weight: bold; border-radius: 5px; }
+        .status-connected { background: #dfffe0; color: #2a8b2e; }
+        .status-disconnected { background: #ffdede; color: #c92a2a; }
+        
+        .controls {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
-            gap: 5px;
-            width: 200px;
-            margin: 20px auto;
-        }
-        input, button {
-            padding: 8px;
-            margin: 5px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-        }
-        .status {
-            background: #f9f9f9;
-            padding: 10px;
-            border-radius: 5px;
-            font-family: monospace;
-        }
-        .waypoint-list {
-            max-height: 200px;
-            overflow-y: auto;
-            background: #f9f9f9;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        .gps-data {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-areas:
+                ".    fwd  ."
+                "left stop right"
+                ".    bwd  .";
             gap: 10px;
+            justify-items: center;
         }
-        .gps-field {
-            background: #f0f8ff;
-            padding: 8px;
-            border-radius: 3px;
+        .ctrl-btn {
+            width: 80px;
+            height: 80px;
+            border: none;
+            border-radius: 50%;
+            background: var(--btn-color);
+            color: white;
+            font-size: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
         }
+        .ctrl-btn:active {
+            transform: scale(0.95);
+        }
+        #btn-fwd { grid-area: fwd; }
+        #btn-bwd { grid-area: bwd; }
+        #btn-l { grid-area: left; }
+        #btn-r { grid-area: right; }
+        #btn-stop { grid-area: stop; background: var(--btn-stop); }
+        
+        input[type="text"], input[type="number"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 14px;
+            background: var(--btn-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:active { transform: scale(0.98); }
+        #btn-train-stop { background: #ff9500; }
+        #btn-clear-waypoints { background: var(--btn-stop); }
+        #path-list { max-height: 150px; overflow-y: auto; background: #f9f9f9; padding: 5px; }
+        #path-list button { background: #5856d6; width: calc(100% - 10px); }
     </style>
 </head>
 <body>
+
     <div class="container">
-        <h1>🚚 ESP32 Delivery Robot</h1>
+        
+        <div class="widget">
+            <div id="status-bar" class="status-disconnected">DISCONNECTED</div>
+            <div id="map"></div>
+            <p>Sats: <strong id="sats">0</strong> | Speed: <strong id="speed">0</strong> km/h | Course: <strong id="course">0</strong>°</p>
+        </div>
 
-        <!-- Manual Controls -->
-        <div class="panel">
-            <h3>🎮 Manual Control</h3>
-            <div class="control-grid">
-                <button class="control-btn forward-btn" onclick="sendCommand('F')">↑</button>
-                <button class="control-btn left-btn" onclick="sendCommand('L')">←</button>
-                <button class="control-btn stop-btn" onclick="sendCommand('S')">●</button>
-                <button class="control-btn right-btn" onclick="sendCommand('R')">→</button>
-                <button class="control-btn backward-btn" onclick="sendCommand('B')">↓</button>
+        <div class="widget">
+            <h2>Manual Control</h2>
+            <div class="controls">
+                <button class="ctrl-btn" id="btn-fwd">▲</button>
+                <button class="ctrl-btn" id="btn-l">◀</button>
+                <button class="ctrl-btn" id="btn-stop">■</button>
+                <button class="ctrl-btn" id="btn-r">▶</button>
+                <button class="ctrl-btn" id="btn-bwd">▼</button>
             </div>
         </div>
 
-        <!-- GPS Data -->
-        <div class="panel">
-            <h3>📍 Live GPS Data</h3>
-            <div class="gps-data" id="gpsData">
-                <div class="gps-field">Latitude: <span id="latitude">--</span></div>
-                <div class="gps-field">Longitude: <span id="longitude">--</span></div>
-                <div class="gps-field">Fix: <span id="fix">--</span></div>
-                <div class="gps-field">Sats: <span id="sats">--</span></div>
-                <div class="gps-field">Speed: <span id="speed">--</span> km/h</div>
-                <div class="gps-field">Course: <span id="course">--</span>°</div>
-            </div>
+        <div class="widget">
+            <h2>Training</h2>
+            <input type="text" id="path-name" placeholder="Enter path name">
+            <button id="btn-train-start">Start Training</button>
+            <button id="btn-train-stop">Stop Training</button>
         </div>
 
-        <!-- Waypoint Controls -->
-        <div class="panel">
-            <h3>🗺️ Waypoint Navigation</h3>
-            <input type="number" id="latInput" placeholder="Latitude" step="any">
-            <input type="number" id="lonInput" placeholder="Longitude" step="any">
-            <button onclick="addWaypoint()">Add Waypoint</button>
-            <button onclick="clearWaypoints()">Clear All</button>
-            <button onclick="startAutonomous()">Start Delivery</button>
-            <div class="waypoint-list" id="waypointList">No waypoints added</div>
+        <div class="widget">
+            <h2>Autonomous</h2>
+            <button id="btn-auto-gps">Run Waypoint Mission</button>
+            <hr>
+            <h3>Path Playback</h3>
+            <button id="btn-refresh-paths">Refresh Path List (N/A)</button>
+            <div id="path-list">(Note: Paths are saved on robot)</div>
         </div>
 
-        <!-- Training Controls -->
-        <div class="panel">
-            <h3>🎬 Training Mode</h3>
-            <input type="text" id="trainName" placeholder="Route name">
-            <button onclick="startTraining()">Start Training</button>
-            <button onclick="stopTraining()">Stop Training</button>
-            <button onclick="playbackPath()">Playback Path</button>
-        </div>
-
-        <!-- Status -->
-        <div class="panel">
-            <h3>📊 Status</h3>
-            <div class="status" id="status">Connecting to MQTT...</div>
+        <div class="widget">
+            <h2>Waypoints</h2>
+            <input type="number" id="wp-lat" placeholder="Latitude (e.g., 6.3337)">
+            <input type="number" id="wp-lon" placeholder="Longitude (e.g., 5.60015)">
+            <button id="btn-add-wp">Add Waypoint</button>
+            <button id="btn-clear-waypoints">Clear All Waypoints</button>
         </div>
     </div>
 
-    <script>
-        // MQTT Configuration - Match your ESP32 settings!
-        const MQTT_BROKER = 'broker.hivemq.com';
-        const MQTT_PORT = 8080; // WebSocket port (for browser) - HiveMQ uses 8080
-        const MQTT_TOPIC_COMMANDS = 'my-robot-project-123/commands';
-        const MQTT_TOPIC_GPS = 'my-robot-project-123/gps';
+<script>
+    // --- NEW: MQTT Config ---
+    // IMPORTANT: Make these topics unique and MATCH your ESP32 code!
+    const brokerUrl = 'wss://broker.hivemq.com:8884/mqtt'; // Use wss:// for secure web
+    const commandTopic = 'my-robot-project-123/commands';
+    const sensorTopic = 'my-robot-project-123/gps';
 
-        let client;
-        let waypoints = [];
-        let isConnected = false;
+    const client = mqtt.connect(brokerUrl);
+    const statusBar = document.getElementById('status-bar');
 
-        // Initialize MQTT
-        function initMqtt() {
-            const clientId = 'web_client_' + Math.random().toString(36).substr(2, 9);
-            // For HiveMQ WebSocket, use path '/mqtt'
-            client = new Paho.MQTT.Client(MQTT_BROKER, MQTT_PORT, '/mqtt', clientId);
+    client.on('connect', () => {
+        console.log('MQTT Connected');
+        statusBar.textContent = 'CONNECTED';
+        statusBar.className = 'status-connected';
+        
+        // Subscribe to sensor data
+        client.subscribe(sensorTopic, (err) => {
+            if (err) console.error("Subscribe failed", err);
+            else console.log("Subscribed to " + sensorTopic);
+        });
+    });
 
-            client.onConnectionLost = onConnectionLost;
-            client.onMessageArrived = onMessageArrived;
+    client.on('close', () => {
+        console.log('Connection closed');
+        statusBar.textContent = 'DISCONNECTED';
+        statusBar.className = 'status-disconnected';
+    });
+    
+    client.on('error', (err) => {
+        console.error('MQTT Error:', err);
+    });
 
-            client.connect({
-                onSuccess: onConnect,
-                onFailure: function(error) {
-                    console.error("MQTT Connection failed: ", error);
-                    updateStatus("❌ MQTT Connection failed: " + error.errorMessage);
+    // --- Map ---
+    const map = L.map('map').setView([6.3337, 5.60015], 13); // Default to UofB
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let robotMarker = L.marker([0, 0], { title: "Robot" }).addTo(map);
+    let robotPath = L.polyline([], {color: 'blue'}).addTo(map);
+    let firstFix = false;
+
+    // --- WebSocket Message Handler ---
+    const satsEl = document.getElementById('sats');
+    const speedEl = document.getElementById('speed');
+    const courseEl = document.getElementById('course');
+
+    // --- NEW: MQTT Message Handler ---
+    client.on('message', (topic, message) => {
+        if (topic === sensorTopic) {
+            let data;
+            try {
+                data = JSON.parse(message.toString());
+            } catch (e) { 
+                console.error("Not a JSON message: ", message.toString());
+                return;
+            }
+
+            if (data.gpsFix) {
+                const latLng = [data.lat, data.lon];
+                robotMarker.setLatLng(latLng);
+                robotPath.addLatLng(latLng);
+                
+                if (!firstFix) {
+                    map.setView(latLng, 18); // Zoom to first fix
+                    firstFix = true;
                 }
-            });
-        }
-
-        function onConnect() {
-            console.log("Connected to MQTT broker via WebSocket");
-            updateStatus("✅ Connected to MQTT broker via WebSocket");
-            isConnected = true;
-
-            // Subscribe to GPS topic
-            client.subscribe(MQTT_TOPIC_GPS);
-            updateStatus("✅ Subscribed to GPS topic: " + MQTT_TOPIC_GPS);
-        }
-
-        function onConnectionLost(responseObject) {
-            if (responseObject.errorCode !== 0) {
-                console.log("Connection lost: " + responseObject.errorMessage);
-                updateStatus("❌ Connection lost: " + responseObject.errorMessage);
-                isConnected = false;
-                setTimeout(initMqtt, 5000); // Retry in 5 seconds
             }
+            satsEl.textContent = data.sats || 0;
+            speedEl.textContent = data.speed ? data.speed.toFixed(1) : 0;
+            courseEl.textContent = data.course ? data.course.toFixed(0) : 0;
         }
+    });
 
-        function onMessageArrived(message) {
-            const topic = message.destinationName;
-            const payload = message.payloadString;
+    // --- NEW: Send Functions ---
+    function sendCommand(message) {
+        console.log("Sending: " + message);
+        client.publish(commandTopic, message);
+    }
+    
+    function sendJsonCommand(data) {
+        sendCommand(JSON.stringify(data));
+    }
 
-            if (topic === MQTT_TOPIC_GPS) {
-                try {
-                    const data = JSON.parse(payload);
-                    updateGpsData(data);
-                } catch (e) {
-                    console.error("Error parsing GPS data: ", e);
-                }
-            }
+    // --- Control Buttons ---
+    function addControlListeners(element, command) {
+        element.addEventListener('mousedown', () => sendCommand(command));
+        element.addEventListener('touchstart', (e) => { e.preventDefault(); sendCommand(command); });
+        
+        element.addEventListener('mouseup', () => sendCommand('S'));
+        element.addEventListener('mouseleave', () => sendCommand('S'));
+        element.addEventListener('touchend', (e) => { e.preventDefault(); sendCommand('S'); });
+    }
+
+    addControlListeners(document.getElementById('btn-fwd'), 'F');
+    addControlListeners(document.getElementById('btn-bwd'), 'B');
+    addControlListeners(document.getElementById('btn-l'), 'L');
+    addControlListeners(document.getElementById('btn-r'), 'R');
+    
+    document.getElementById('btn-stop').addEventListener('click', () => sendCommand('S'));
+
+
+    // --- Training Buttons ---
+    document.getElementById('btn-train-start').addEventListener('click', () => {
+        const name = document.getElementById('path-name').value;
+        if (!name) {
+            alert('Please enter a path name');
+            return;
         }
+        sendJsonCommand({ cmd: 'train_start', name: name });
+    });
+    
+    document.getElementById('btn-train-stop').addEventListener('click', () => {
+        sendJsonCommand({ cmd: 'train_stop' });
+    });
+    
+    // --- Automation/Path Buttons ---
+    // We can't list files from SPIFFS anymore. This is now a "blind" command.
+    // The user must remember their path names.
+    document.getElementById('btn-refresh-paths').addEventListener('click', () => {
+        alert("Path list is stored on the robot. Refresh not available. Please enter the path name you want to run and press 'Start Training' (which is now 'Run Path').");
+    });
+    
+    document.getElementById('btn-auto-gps').addEventListener('click', () => {
+        sendJsonCommand({ cmd: 'start_autonomous' });
+    });
 
-        function sendCommand(command) {
-            if (!isConnected) {
-                alert("Not connected to MQTT broker!");
-                return;
-            }
-
-            const message = new Paho.MQTT.Message(command);
-            message.destinationName = MQTT_TOPIC_COMMANDS;
-            client.send(message);
-            console.log("Sent command:", command);
+    // --- Waypoint Buttons ---
+    document.getElementById('btn-add-wp').addEventListener('click', () => {
+        const lat = parseFloat(document.getElementById('wp-lat').value);
+        const lon = parseFloat(document.getElementById('wp-lon').value);
+        if (isNaN(lat) || isNaN(lon)) {
+            alert("Please enter valid Latitude and Longitude");
+            return;
         }
+        sendJsonCommand({ cmd: 'add_waypoint', lat: lat, lon: lon });
+        
+        // Add a visual marker to the map
+        L.marker([lat, lon], { title: "Waypoint" }).addTo(map)
+            .bindPopup(`Waypoint: ${lat}, ${lon}`).openPopup();
+    });
 
-        function addWaypoint() {
-            const lat = parseFloat(document.getElementById('latInput').value);
-            const lon = parseFloat(document.getElementById('lonInput').value);
+    document.getElementById('btn-clear-waypoints').addEventListener('click', () => {
+        sendJsonCommand({ cmd: 'clear_waypoints' });
+        alert("Waypoints cleared on robot.");
+    });
 
-            if (isNaN(lat) || isNaN(lon)) {
-                alert("Please enter valid latitude and longitude!");
-                return;
-            }
+    // --- Init ---
+    // (No 'load' event needed, MQTT client starts connecting immediately)
 
-            const waypoint = { lat: lat, lon: lon };
-            waypoints.push(waypoint);
-
-            const cmd = {
-                cmd: "add_waypoint",
-                lat: lat,
-                lon: lon
-            };
-
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-            }
-
-            updateWaypointList();
-            document.getElementById('latInput').value = '';
-            document.getElementById('lonInput').value = '';
-        }
-
-        function clearWaypoints() {
-            waypoints = [];
-            const cmd = { cmd: "clear_waypoints" };
-            
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-            }
-
-            updateWaypointList();
-        }
-
-        function startAutonomous() {
-            if (waypoints.length === 0) {
-                alert("Add at least one waypoint first!");
-                return;
-            }
-
-            const cmd = { cmd: "start_autonomous" };
-            
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-                updateStatus("🚀 Autonomous mode started!");
-            }
-        }
-
-        function startTraining() {
-            const name = document.getElementById('trainName').value.trim();
-            if (!name) {
-                alert("Please enter a route name!");
-                return;
-            }
-
-            const cmd = { cmd: "train_start", name: name };
-            
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-                updateStatus(`🎬 Training started: ${name}`);
-            }
-        }
-
-        function stopTraining() {
-            const cmd = { cmd: "train_stop" };
-            
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-                updateStatus("⏹️ Training stopped");
-            }
-        }
-
-        function playbackPath() {
-            const name = document.getElementById('trainName').value.trim();
-            if (!name) {
-                alert("Please enter a route name to play back!");
-                return;
-            }
-
-            const cmd = { cmd: "play_path", name: name };
-            
-            if (isConnected) {
-                const message = new Paho.MQTT.Message(JSON.stringify(cmd));
-                message.destinationName = MQTT_TOPIC_COMMANDS;
-                client.send(message);
-                updateStatus(`▶️ Playing back: ${name}`);
-            }
-        }
-
-        function updateWaypointList() {
-            const listDiv = document.getElementById('waypointList');
-            if (waypoints.length === 0) {
-                listDiv.innerHTML = 'No waypoints added';
-                return;
-            }
-
-            let html = '<ul>';
-            waypoints.forEach((wp, index) => {
-                html += `<li>📍 ${index + 1}: ${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</li>`;
-            });
-            html += '</ul>';
-            listDiv.innerHTML = html;
-        }
-
-        function updateGpsData(data) {
-            document.getElementById('latitude').textContent = data.lat ? data.lat.toFixed(6) : '--';
-            document.getElementById('longitude').textContent = data.lon ? data.lon.toFixed(6) : '--';
-            document.getElementById('fix').textContent = data.gpsFix ? '✅ Yes' : '❌ No';
-            document.getElementById('sats').textContent = data.sats || '--';
-            document.getElementById('speed').textContent = data.speed ? data.speed.toFixed(2) : '--';
-            document.getElementById('course').textContent = data.course ? data.course.toFixed(1) : '--';
-        }
-
-        function updateStatus(text) {
-            document.getElementById('status').textContent = text;
-        }
-
-        // Load Paho MQTT library and initialize
-        function loadMqttLibrary() {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js';
-            script.onload = function() {
-                initMqtt();
-            };
-            document.head.appendChild(script);
-        }
-
-        // Initialize when page loads
-        window.onload = function() {
-            loadMqttLibrary();
-        };
-    </script>
+</script>
 </body>
 </html>
