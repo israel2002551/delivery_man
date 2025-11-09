@@ -3,10 +3,10 @@
     <title>ESP32 Robot Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css  " crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js  " crossorigin=""></script>
 
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js  "></script>
 
     <style>
         :root {
@@ -130,6 +130,8 @@
             <button id="btn-auto-gps">Run Waypoint Mission</button>
             <hr>
             <h3>Path Playback</h3>
+            <input type="text" id="playback-path-name" placeholder="Enter path name to play">
+            <button id="btn-playback">Play Path</button>
             <button id="btn-refresh-paths">Refresh Path List (N/A)</button>
             <div id="path-list">(Note: Paths are saved on robot)</div>
         </div>
@@ -258,6 +260,16 @@
     
     document.getElementById('btn-train-stop').addEventListener('click', () => {
         sendJsonCommand({ cmd: 'train_stop' });
+    });
+    
+    // --- Path Playback ---
+    document.getElementById('btn-playback').addEventListener('click', () => {
+        const name = document.getElementById('playback-path-name').value;
+        if (!name) {
+            alert('Please enter a path name to play back');
+            return;
+        }
+        sendJsonCommand({ cmd: 'play_path', name: name });
     });
     
     // --- Automation/Path Buttons ---
