@@ -27,7 +27,7 @@
         }
         .container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: 1fr; /* Single column on mobile */
             gap: 15px;
             max-width: 1200px;
             margin: auto;
@@ -38,9 +38,24 @@
             border-radius: var(--border-rad);
             box-shadow: var(--shadow);
         }
-        h2 { margin-top: 0; border-bottom: 2px solid var(--bg-color); padding-bottom: 5px; }
-        #map { height: 350px; width: 100%; border-radius: var(--border-rad); }
-        #status-bar { padding: 10px; text-align: center; font-weight: bold; border-radius: 5px; }
+        h2 { 
+            margin-top: 0; 
+            border-bottom: 2px solid var(--bg-color); 
+            padding-bottom: 5px; 
+            font-size: 1.2rem; /* Smaller on mobile */
+        }
+        #map { 
+            height: 300px; /* Smaller on mobile */
+            width: 100%; 
+            border-radius: var(--border-rad); 
+        }
+        #status-bar { 
+            padding: 10px; 
+            text-align: center; 
+            font-weight: bold; 
+            border-radius: 5px; 
+            font-size: 0.9rem; /* Smaller text */
+        }
         .status-connected { background: #dfffe0; color: #2a8b2e; }
         .status-disconnected { background: #ffdede; color: #c92a2a; }
         
@@ -54,13 +69,13 @@
             justify-items: center;
         }
         .ctrl-btn {
-            width: 80px;
-            height: 80px;
+            width: 70px; /* Smaller on mobile */
+            height: 70px;
             border: none;
             border-radius: 50%;
             background: var(--btn-color);
             color: white;
-            font-size: 24px;
+            font-size: 20px; /* Smaller font */
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: transform 0.1s;
         }
@@ -74,27 +89,82 @@
         #btn-stop { grid-area: stop; background: var(--btn-stop); }
         
         input[type="text"], input[type="number"] {
-            width: calc(100% - 20px);
+            width: 100%; /* Full width */
             padding: 10px;
             margin-bottom: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
+            font-size: 1rem; /* Ensure readable */
         }
         button {
             padding: 10px 15px;
-            font-size: 14px;
+            font-size: 1rem; /* Ensure readable */
             background: var(--btn-color);
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            margin: 5px;
+            margin: 5px 2px; /* Smaller margin */
+            width: 100%; /* Full width on mobile */
         }
         button:active { transform: scale(0.98); }
         #btn-train-stop { background: #ff9500; }
         #btn-clear-waypoints { background: var(--btn-stop); }
-        #path-list { max-height: 150px; overflow-y: auto; background: #f9f9f9; padding: 5px; }
-        #path-list button { background: #5856d6; width: calc(100% - 10px); }
+        #path-list { 
+            max-height: 150px; 
+            overflow-y: auto; 
+            background: #f9f9f9; 
+            padding: 5px; 
+            font-size: 0.9rem; /* Smaller text */
+        }
+        #path-list button { 
+            background: #5856d6; 
+            width: 100%; 
+            margin: 2px 0;
+        }
+        #waypoint-list { 
+            max-height: 150px; 
+            overflow-y: auto; 
+            background: #f9f9f9; 
+            padding: 5px; 
+            font-size: 0.9rem; /* Smaller text */
+        }
+        #waypoint-list div { 
+            padding: 5px; 
+            border-bottom: 1px solid #ddd; 
+        }
+        
+        /* Desktop responsiveness */
+        @media (min-width: 768px) {
+            .container {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Multiple columns on desktop */
+            }
+            .ctrl-btn {
+                width: 80px; /* Larger on desktop */
+                height: 80px;
+                font-size: 24px; /* Larger font */
+            }
+            h2 {
+                font-size: 1.4rem; /* Larger on desktop */
+            }
+            #map {
+                height: 350px; /* Taller on desktop */
+            }
+            button {
+                width: auto; /* Auto width on desktop */
+            }
+        }
+        
+        /* Tablet responsiveness */
+        @media (min-width: 1024px) {
+            .ctrl-btn {
+                width: 90px; /* Even larger on tablet */
+                height: 90px;
+            }
+            #map {
+                height: 400px; /* Taller on tablet */
+            }
+        }
     </style>
 </head>
 <body>
@@ -138,10 +208,11 @@
 
         <div class="widget">
             <h2>Waypoints</h2>
-            <input type="number" id="wp-lat" placeholder="Latitude (e.g., 6.3337)">
-            <input type="number" id="wp-lon" placeholder="Longitude (e.g., 5.60015)">
+            <input type="number" id="wp-lat" placeholder="Latitude (e.g., 6.3337)" step="any">
+            <input type="number" id="wp-lon" placeholder="Longitude (e.g., 5.60015)" step="any">
             <button id="btn-add-wp">Add Waypoint</button>
             <button id="btn-clear-waypoints">Clear All Waypoints</button>
+            <div id="waypoint-list">No waypoints added</div>
         </div>
     </div>
 
@@ -187,6 +258,10 @@
     let robotMarker = L.marker([0, 0], { title: "Robot" }).addTo(map);
     let robotPath = L.polyline([], {color: 'blue'}).addTo(map);
     let firstFix = false;
+
+    // --- Store waypoints for display ---
+    let waypointMarkers = [];
+    let waypointList = [];
 
     // --- WebSocket Message Handler ---
     const satsEl = document.getElementById('sats');
@@ -293,15 +368,47 @@
         }
         sendJsonCommand({ cmd: 'add_waypoint', lat: lat, lon: lon });
         
-        // Add a visual marker to the map
-        L.marker([lat, lon], { title: "Waypoint" }).addTo(map)
-            .bindPopup(`Waypoint: ${lat}, ${lon}`).openPopup();
+        // Add to waypoint list array
+        const waypoint = { lat: lat, lon: lon, index: waypointList.length + 1 };
+        waypointList.push(waypoint);
+        
+        // Add visual marker to the map
+        const wpMarker = L.marker([lat, lon], { title: `Waypoint ${waypointList.length}` }).addTo(map)
+            .bindPopup(`Waypoint ${waypointList.length}: ${lat}, ${lon}`).openPopup();
+        waypointMarkers.push(wpMarker);
+        
+        // Update waypoint list display
+        updateWaypointListDisplay();
     });
 
     document.getElementById('btn-clear-waypoints').addEventListener('click', () => {
         sendJsonCommand({ cmd: 'clear_waypoints' });
-        alert("Waypoints cleared on robot.");
+        
+        // Clear map markers
+        waypointMarkers.forEach(marker => map.removeLayer(marker));
+        waypointMarkers = [];
+        waypointList = [];
+        
+        // Clear display list
+        updateWaypointListDisplay();
+        
+        alert("Waypoints cleared on robot and map.");
     });
+
+    // --- Update waypoint list display ---
+    function updateWaypointListDisplay() {
+        const listDiv = document.getElementById('waypoint-list');
+        if (waypointList.length === 0) {
+            listDiv.innerHTML = 'No waypoints added';
+            return;
+        }
+        
+        let html = '<div><strong>Current Waypoints:</strong></div>';
+        waypointList.forEach((wp, index) => {
+            html += `<div>📍 ${index + 1}: ${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div>`;
+        });
+        listDiv.innerHTML = html;
+    }
 
     // --- Init ---
     // (No 'load' event needed, MQTT client starts connecting immediately)
